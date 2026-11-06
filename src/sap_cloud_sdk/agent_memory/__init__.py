@@ -27,6 +27,9 @@ from sap_cloud_sdk.agent_memory.exceptions import (
     AgentMemoryError,
     AgentMemoryHttpError,
     AgentMemoryNotFoundError,
+    AgentMemoryThreadConflictError,
+    AgentMemoryThreadExpiredError,
+    AgentMemoryThreadNotFoundError,
     AgentMemoryValidationError,
 )
 from sap_cloud_sdk.agent_memory._models import (
@@ -38,6 +41,14 @@ from sap_cloud_sdk.agent_memory._models import (
     SearchResult,
 )
 from sap_cloud_sdk.agent_memory.utils._odata import FilterDefinition
+from sap_cloud_sdk.agent_memory.thread_registry import (
+    BaseThreadRegistry,
+    InMemoryThreadRegistry,
+    SAPAgentMemoryThreadRegistry,
+    ThreadPage,
+    ThreadRegistryEntry,
+    create_thread_registry,
+)
 from sap_cloud_sdk.core.protocol.http import HttpClient, XsuaaAuthProvider
 
 
@@ -112,6 +123,9 @@ __all__ = [
     "AgentMemoryConfigError",
     "AgentMemoryHttpError",
     "AgentMemoryNotFoundError",
+    "AgentMemoryThreadConflictError",
+    "AgentMemoryThreadExpiredError",
+    "AgentMemoryThreadNotFoundError",
     "AgentMemoryValidationError",
     "FilterDefinition",
     "Memory",
@@ -119,5 +133,11 @@ __all__ = [
     "MessageRole",
     "RetentionConfig",
     "SearchResult",
+    "BaseThreadRegistry",
+    "InMemoryThreadRegistry",
+    "SAPAgentMemoryThreadRegistry",
+    "ThreadPage",
+    "ThreadRegistryEntry",
     "create_client",
+    "create_thread_registry",
 ]

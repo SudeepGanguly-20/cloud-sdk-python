@@ -59,6 +59,7 @@ _ROLE_KEY = "role"
 _MESSAGE_DAYS_KEY = "messageDays"
 _MEMORY_DAYS_KEY = "memoryDays"
 _USAGE_LOG_DAYS_KEY = "usageLogDays"
+_THREAD_DAYS_KEY = "threadDays"
 
 
 def _require_non_empty(**fields: str) -> None:
@@ -96,7 +97,7 @@ class AgentMemoryClient:
     Do not instantiate directly — use :func:`sap_cloud_sdk.agent_memory.create_client`.
 
     Args:
-        transport: HTTP transport loaded from the default service binding
+        http: HTTP client loaded from the default service binding
             (resolved once at construction time by
             :func:`sap_cloud_sdk.agent_memory.create_client`).
         access_strategy: Tenant access strategy for all operations.
@@ -164,6 +165,8 @@ class AgentMemoryClient:
             raise AgentMemoryHttpError(
                 f"Request failed: {method.value} {path} — {exc}"
             ) from exc
+        except AgentMemoryValidationError:
+            raise
         except Exception as exc:
             raise AgentMemoryHttpError(str(exc)) from exc
         if response.status_code == 204 or not response.content:
@@ -605,6 +608,8 @@ class AgentMemoryClient:
         message_days: Optional[int] = None,
         memory_days: Optional[int] = None,
         usage_log_days: Optional[int] = None,
+        thread_days: Optional[int] = None,
+        max_checkpoints_per_thread: Optional[int] = None,
     ) -> None:
         """Update the data retention configuration.
 
@@ -616,21 +621,36 @@ class AgentMemoryClient:
             message_days: How long to keep messages (days).
             memory_days: How long to keep memories without access (days).
             usage_log_days: How long to keep access and search logs (days).
+            thread_days: Default TTL (days) applied only to registered threads
+                (those created via the Thread Registry API). Age-based cutoff for
+                thread cleanup; unregistered threads are unaffected. ``None`` leaves
+                the server setting unchanged. ``0`` disables age-based cleanup.
+            max_checkpoints_per_thread: Keep at most N checkpoints per
+                ``(thread, scope)``, deleting oldest first. ``None`` leaves
+                the server setting unchanged. ``0`` disables count-based cleanup.
 
         Raises:
             AgentMemoryValidationError: If no fields are provided, any provided value is
                 negative, or tenant is missing for ``SUBSCRIBER``.
             AgentMemoryHttpError: If the request fails.
         """
-        if message_days is None and memory_days is None and usage_log_days is None:
+        if (
+            message_days is None
+            and memory_days is None
+            and usage_log_days is None
+            and thread_days is None
+            and max_checkpoints_per_thread is None
+        ):
             raise AgentMemoryValidationError(
-                "At least one of 'message_days', 'memory_days', or "
-                "'usage_log_days' must be provided"
+                "At least one of 'message_days', 'memory_days', 'usage_log_days', "
+                "'thread_days', or 'max_checkpoints_per_thread' must be provided"
             )
         for name, value in (
             ("message_days", message_days),
             ("memory_days", memory_days),
             ("usage_log_days", usage_log_days),
+            ("thread_days", thread_days),
+            ("max_checkpoints_per_thread", max_checkpoints_per_thread),
         ):
             if value is not None and value < 0:
                 raise AgentMemoryValidationError(f"'{name}' must be >= 0")
@@ -642,6 +662,10 @@ class AgentMemoryClient:
             payload[_MEMORY_DAYS_KEY] = memory_days
         if usage_log_days is not None:
             payload[_USAGE_LOG_DAYS_KEY] = usage_log_days
+        if thread_days is not None:
+            payload[_THREAD_DAYS_KEY] = thread_days
+        if max_checkpoints_per_thread is not None:
+            payload["maxCheckpointsPerThread"] = max_checkpoints_per_thread
 
         self._request(
             HttpMethod.PATCH,

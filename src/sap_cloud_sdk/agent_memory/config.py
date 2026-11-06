@@ -86,6 +86,26 @@ class AgentMemoryConfig:
             raise AgentMemoryConfigError(
                 "identityzone must be a non-empty string when provided"
             )
+        xsuaa_creds = (self.token_url, self.client_id, self.client_secret)
+        if any(xsuaa_creds) and not all(xsuaa_creds):
+            missing = [
+                name
+                for name, value in (
+                    ("token_url", self.token_url),
+                    ("client_id", self.client_id),
+                    ("client_secret", self.client_secret),
+                )
+                if not value
+            ]
+            raise AgentMemoryConfigError(
+                "Partial XSUAA credentials provided — all three (token_url, client_id, "
+                "client_secret) must be set together. Missing: " + ", ".join(missing)
+            )
+        if self.identityzone and not self.token_url:
+            raise AgentMemoryConfigError(
+                "identityzone applies only to XSUAA (it derives the subscriber token URL); "
+                "it must not be set without token_url/client_id/client_secret."
+            )
 
 
 @dataclass
@@ -128,7 +148,7 @@ class BindingData:
             raise AgentMemoryConfigError(f"Missing required field in uaa JSON: {e}")
 
 
-def _load_config_from_env() -> AgentMemoryConfig:
+def _load_config_from_env() -> Optional[AgentMemoryConfig]:
     """Load Agent Memory configuration from a mounted volume or environment variables.
 
     Uses the secret resolver with fallback order:
@@ -136,13 +156,34 @@ def _load_config_from_env() -> AgentMemoryConfig:
     2. Environment variables ``CLOUD_SDK_CFG_HANA_AGENT_MEMORY_DEFAULT_*``
 
     Returns:
-        A validated ``AgentMemoryConfig``.
+        A validated ``AgentMemoryConfig``, or ``None`` if no binding is found.
 
     Raises:
-        AgentMemoryConfigError: If configuration cannot be loaded or is incomplete.
+        AgentMemoryConfigError: If a binding is found but is incomplete or malformed.
     """
+    from sap_cloud_sdk.core.secret_resolver import (
+        read_from_mount_and_fallback_to_env_var,
+    )
+
+    binding = BindingData()
     try:
-        return _make_config_factory("default")()
+        read_from_mount_and_fallback_to_env_var(
+            base_volume_mount="/etc/secrets/appfnd",
+            base_var_name="CLOUD_SDK_CFG",
+            module=_SERVICE_NAME,
+            instance="default",
+            target=binding,
+        )
+    except RuntimeError:
+        return None
+
+    # If neither field was filled, no binding is configured anywhere.
+    if not binding.application_url and not binding.uaa:
+        return None
+
+    binding.validate()
+    try:
+        return binding.extract_config()
     except AgentMemoryConfigError:
         raise
     except Exception as exc:
